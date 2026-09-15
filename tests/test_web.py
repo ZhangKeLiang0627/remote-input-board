@@ -177,7 +177,9 @@ class WebTests(unittest.TestCase):
         self.assertIn("function keepComposerFocus(event)", html)
         self.assertIn("event.preventDefault();", html)
         self.assertIn('setStatus("停止输入后 " + (d / 1000).toString() + " 秒自动发送。");', html)
-        self.assertIn("sendButton.disabled = false; focusComposer();", html)
+        self.assertIn('sendButton.removeAttribute("aria-busy");', html)
+        self.assertIn('pendingEnterAfterSend = false;', html)
+        self.assertNotIn("sendButton.disabled = true", html)
         self.assertIn("applyHistoryItem", html)
         self.assertIn("insertTextAtSelection", html)
         self.assertIn("已插入历史记录，可编辑后发送。", html)
@@ -744,6 +746,3 @@ class WebTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-
-
