@@ -69,7 +69,12 @@ Remote Input Board 就是为这个而生的。电脑上跑一个小服务，手�
 电脑端一行启动：
 
 ```powershell
+# uv
 uv run python -m py_remote_input
+
+# conda
+conda activate yourENV
+python -m py_remote_input
 ```
 
 终端会打印出手机访问地址：
