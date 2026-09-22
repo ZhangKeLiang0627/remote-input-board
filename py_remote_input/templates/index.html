@@ -279,7 +279,7 @@
       background: rgba(29, 79, 145, 0.1);
     }
     button.mouseButton { color: var(--accent-2); background: rgba(29, 79, 145, 0.12); }
-    button:disabled { opacity: 0.62; cursor: wait; }
+    button:disabled, button[aria-busy="true"] { opacity: 0.62; cursor: wait; }
     .historyPanel { padding: 14px; background: rgba(255, 255, 255, 0.92); border: 1px solid var(--line); border-radius: 18px; box-shadow: var(--shadow); }
     .historyHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
     .historyHeader h2 { margin: 0; font-size: 16px; }
@@ -524,7 +524,7 @@
           <textarea id="text" autofocus placeholder="在这里用豆包输入法语音输入"></textarea>
           <!-- 自动发送倒计时区域（已隐藏，保留代码备用） -->
           <div id="autoSendSentence" class="autoSendSentence">
-            <input id="autoSend" type="checkbox" checked aria-label="启用自动发送">
+            <input id="autoSend" type="checkbox" aria-label="启用自动发送">
             <span id="autoSendPrefix">在</span>
             <input id="delaySeconds" type="number" inputmode="decimal" min="0.1" max="30" step="0.1" value="2">
             <span id="autoSendSuffix">秒后自动发送！</span>
@@ -694,6 +694,7 @@
     let pendingTimer = null;
     let countdownStartedAt = 0;
     let sending = false;
+    let pendingEnterAfterSend = false;
     let syncingKey = false;
     let currentMode = "text";
     const activeTrackpadPointers = new Map();
@@ -1252,7 +1253,10 @@
 
     function loadSavedDelay() { const v = window.localStorage.getItem(DELAY_STORAGE_KEY); if (v !== null) delaySeconds.value = normalizeDelaySeconds(v).toString(); }
 
-    function loadSavedAutoSend() { const v = window.localStorage.getItem(AUTO_SEND_STORAGE_KEY); if (v !== null) autoSend.checked = v === "true"; }
+    function loadSavedAutoSend() {
+      // 自动发送 UI 已隐藏，强制关闭；重新显示 UI 后可恢复读取 localStorage
+      autoSend.checked = false;
+    }
 
     function saveAutoSend() { window.localStorage.setItem(AUTO_SEND_STORAGE_KEY, autoSend.checked ? "true" : "false"); }
 
@@ -1433,13 +1437,17 @@
     function setDragLocked(locked) { if (dragLocked === locked) return; dragLocked = locked; trackpad.classList.toggle("dragLocked", dragLocked); syncMouseButton("left", locked ? "down" : "up"); setStatus(locked ? "拖拽中，松开结束。" : "拖拽结束。"); }
 
     async function sendText(options = {}) {
-      const payloadText = getComposerText(); if (!payloadText.trim() || sending) return;
-      stopCountdown(); sending = true; sendButton.disabled = true; setStatus(options.source === "auto" ? "自动发送中..." : "发送中...");
+      const payloadText = getComposerText();
+      if (!payloadText.trim()) return;
+      if (sending) { pendingEnterAfterSend = true; return; }
+      stopCountdown(); sending = true; sendButton.setAttribute("aria-busy", "true"); setStatus(options.source === "auto" ? "自动发送中..." : "发送中...");
+      let sendSucceeded = false;
       try {
         const messageType = settings.inputMethod === "paste" ? "paste" : "type";
         const r = (realtimeSocket && realtimeSocket.readyState === WebSocket.OPEN)
           ? await sendRealtimeRequest({ type: messageType, text: payloadText })
           : await postJson("/api/" + messageType, { text: payloadText });
+        sendSucceeded = true;
         addHistoryItem({ kind: "text", text: payloadText });
         const sentChars = (typeof r.sentChars === "number" && r.sentChars > 0) ? r.sentChars : payloadText.length;
         const serverTotal = (typeof r.totalChars === "number") ? r.totalChars : 0;
@@ -1450,7 +1458,14 @@
         setStatus("已发送，耗时 " + (r.durationMs || 0) + " ms。");
       }
       catch (e) { setStatus(e.message || "发送失败", true); }
-      finally { sending = false; sendButton.disabled = false; focusComposer(); }
+      finally {
+        const shouldSendEnter = sendSucceeded && pendingEnterAfterSend;
+        pendingEnterAfterSend = false;
+        sending = false;
+        sendButton.removeAttribute("aria-busy");
+        focusComposer();
+        if (shouldSendEnter) syncKey("enter");
+      }
     }
 
     async function syncKey(key) { if (syncingKey) return; stopCountdown(); syncingKey = true; try { await sendRealtime({ type: "key", key }, () => postJson("/api/key", { key })); } catch (e) { setStatus(e.message || "按键同步失败", true); } finally { syncingKey = false; } }
@@ -1459,6 +1474,7 @@
     function syncEnter(event) { event.preventDefault(); syncKey("enter"); }
 
     function sendOrEnter() {
+      if (sending) { pendingEnterAfterSend = true; setStatus("发送完成后回车..."); return; }
       getComposerText().trim() ? sendText({ source: "manual" }) : syncKey("enter");
     }
 
@@ -1535,7 +1551,7 @@
     });
     clearHistory.addEventListener("click", () => { saveHistory([]); renderHistory(); setStatus("历史已清空。"); });
 
-    loadSavedAutoSend(); loadSavedDelay(); renderAutoSendCopy(); loadSavedEnterBehavior(); loadSavedSettings(); loadSavedServers();
+    loadSavedAutoSend(); loadSavedDelay(); renderAutoSendCopy(); stopCountdown(); loadSavedEnterBehavior(); loadSavedSettings(); loadSavedServers();
     loadTotalChars(); renderHistory(); connectRealtime();
     ensureBackspaceSentinel(); primeMobileKeyboard();
     window.addEventListener("pageshow", primeMobileKeyboard);

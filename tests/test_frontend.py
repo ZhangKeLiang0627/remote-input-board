@@ -59,6 +59,46 @@ process.stdout.write(JSON.stringify(context.result));
             {"text": "helloX", "selectionStart": 6, "selectionEnd": 6},
         )
 
+    def run_send_or_enter(self, current, sending):
+        script = r"""
+const fs = require("fs");
+const vm = require("vm");
+const source = fs.readFileSync(process.argv[1], "utf8");
+const marker = "function sendOrEnter";
+const start = source.indexOf(marker);
+if (start < 0) throw new Error("sendOrEnter is missing");
+const end = source.indexOf("\n    function ", start + marker.length);
+const helper = source.slice(start, end < 0 ? source.length : end);
+const calls = [];
+const context = { calls, getComposerText: () => process.argv[2], sendText: () => calls.push("send"), syncKey: (key) => calls.push(key), setStatus: () => {} };
+vm.runInNewContext(
+  "let pendingEnterAfterSend = false; let sending = " + JSON.stringify(process.argv[3] === "true") + ";\n" +
+  helper +
+  "\nsendOrEnter(); this.result = { calls, pendingEnterAfterSend };",
+  context,
+);
+process.stdout.write(JSON.stringify(context.result));
+"""
+        completed = subprocess.run(
+            ["node", "-e", script, str(TEMPLATE), current, str(sending).lower()],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return json.loads(completed.stdout)
+
+    def test_fast_second_send_click_queues_enter_after_current_send(self):
+        self.assertEqual(
+            self.run_send_or_enter("已有内容", True),
+            {"calls": [], "pendingEnterAfterSend": True},
+        )
+
+    def test_send_button_still_sends_when_not_already_sending(self):
+        self.assertEqual(
+            self.run_send_or_enter("已有内容", False),
+            {"calls": ["send"], "pendingEnterAfterSend": False},
+        )
 
 if __name__ == "__main__":
     unittest.main()

@@ -129,10 +129,10 @@ class TyperTests(unittest.TestCase):
         self.assertFalse(typer._restore_clipboard([]))
 
     def test_paste_fast_path_timing_budget_is_short(self):
-        self.assertLessEqual(typer.PASTE_SETTLE_DELAY, 0.03)
-        self.assertLessEqual(typer.PASTE_HISTORY_TIMEOUT, 0.4)
-        self.assertLessEqual(typer.PASTE_HISTORY_POLL_INTERVAL, 0.02)
-        self.assertLessEqual(typer.PASTE_RESTORE_DELAY, 0.12)
+        self.assertLessEqual(typer.PASTE_SETTLE_DELAY, 0.01)
+        self.assertLessEqual(typer.PASTE_HISTORY_TIMEOUT, 0.3)
+        self.assertLessEqual(typer.PASTE_HISTORY_POLL_INTERVAL, 0.005)
+        self.assertLessEqual(typer.PASTE_RESTORE_DELAY, 0.08)
 
     def test_paste_restores_previous_clipboard_after_history_capture(self):
         snapshot = [(typer.CF_UNICODETEXT, 7)]
